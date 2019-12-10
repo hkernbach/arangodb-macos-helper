@@ -15,6 +15,9 @@ const { readdirSync } = require('fs');
 const { join } = require('path');
 const rimraf = require("rimraf");
 const { exec } = require('child_process');
+const util = require('util');
+
+const spawn = require('child_process').spawn;
 
 const arangoPackageLocation = './arangodb/';
 const tmpDirectory = './tmp/';
@@ -44,6 +47,12 @@ program
     envValue = env;
   });
 program.parse(process.argv);
+
+if (program.debug) {
+  if (program.debug === 'false') {
+    program.debug = false;
+  }
+}
 
 if (typeof cmdValue === 'undefined') {
   console.error('No command given!');
@@ -156,7 +165,7 @@ function killAll() {
       if (err) {
         //some err occurred
         if (program.debug) {
-          console.error(err)
+          console.log(err)
         }
       }
     });
@@ -167,7 +176,7 @@ function killAll() {
       if (err) {
         //some err occurred
         if (program.debug) {
-          console.error(err)
+          console.log(err)
         }
       }
     });
@@ -193,7 +202,7 @@ function analysePaths() {
   configuration.tmpOldJS = tmpOldDirectory + configuration.tmpOldSubDirectory + '/usr/share/arangodb3/js' // TODO: auto detect
 }
 
-function start() {
+async function start() {
   if (program.force) {
     killAll();
   }
@@ -201,20 +210,27 @@ function start() {
   analysePaths();
 
   if (cmdValue === 'singleServer') {
-    testSingleServer();
+    await testSingleServer();
   }
+
+console.log("sleeping for 1000 sec");
+await sleep(1000000000);
+}
+
+function makeAbsolutePath(path) {
+  return process.cwd() + path.substr(1, path.length);
 }
 
 function buildStarterCommand(arangodb, arangod, databasePath, mode, js, removeOldDirectory, upgrade) {
   let cmd = '';
   if (arangodb) {
-    cmd += arangodb;
+    cmd += makeAbsolutePath(arangodb);
   }
   if (arangod) {
-    cmd += ' --server.arangod=' + arangod;
+    cmd += ' --server.arangod=' + makeAbsolutePath(arangod);
   }
   if (databasePath) {
-    cmd += ' --starter.data-dir=' + tmpDatabaseDirectory + databasePath;
+    cmd += ' --starter.data-dir=' + makeAbsolutePath(databasePath);
     if (removeOldDirectory) {
       if (fs.existsSync(tmpDirectory + databasePath)) {
         rimraf.sync(tmpDirectory + databasePath); // will delete the directory
@@ -222,7 +238,7 @@ function buildStarterCommand(arangodb, arangod, databasePath, mode, js, removeOl
     }
   }
   if (js) {
-    cmd += ' --server.js-dir ' + js
+    cmd += ' --server.js-dir ' + makeAbsolutePath(js);
   }
   if (mode) {
     cmd += ' --starter.mode ' + mode;
@@ -234,8 +250,56 @@ function buildStarterCommand(arangodb, arangod, databasePath, mode, js, removeOl
   return cmd;
 }
 
-function testSingleServer() {
+function execShellCommand(name, cmd) {
+  var spawn = require('child_process').spawn;
+  let fileName = name + '.sh';
+  let fullFileName = makeAbsolutePath(tmpDirectory) + fileName;
+
+  // we need to create a sh script first to execute it in background ...
+  fs.writeFile(fullFileName, cmd, function(err) {
+    if (err) {
+      return console.log(err);
+    }
+    if (program.debug) {
+      console.log("The file: " + fullFileName + " was saved!");
+    }
+  }); 
+  exec('chmod a+x ' + fullFileName, (err, stdout, stderr) => {
+    if (err) {
+      //some err occurred
+      if (program.debug) {
+        console.error(err)
+      }
+    }
+  });
+
+  // now execute in background
+  var child = spawn('/bin/sh', [fullFileName], {
+    detached: true
+  });
+
+ child.stderr.on('data', function (data) {
+    if (program.debug) {
+      console.error("STDERR:", data.toString());
+    }
+  });
+  child.stdout.on('data', function (data) {
+    if (program.debug) {
+      console.log("STDOUT:", data.toString());
+    }
+  });
+  child.on('exit', function (exitCode) {
+    if (program.debug) {
+      console.log("Child exited with code: " + exitCode);
+    }
+  });
+}
+
+async function testSingleServer() {
+  console.log(configuration);
   let cmd = buildStarterCommand(configuration.tmpNewStarter, configuration.tmpNewArangod, 'singleServer', 'single', configuration.tmpNewJS, true);
+  execShellCommand('testSingleServer', cmd);
+  return;
   try {
     exec(cmd, (err, stdout, stderr) => {
       if (err) {
@@ -245,7 +309,7 @@ function testSingleServer() {
         }
       } else {
         console.log(stdout);
-        console.log("success");
+        console.log("Started ArangoDB Single Server, go to http://localhost:8529/ and start testing!");
       }
     });
   } catch (ignore) {
