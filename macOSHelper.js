@@ -296,7 +296,6 @@ function execShellCommand(name, cmd) {
 }
 
 async function testSingleServer() {
-  console.log(configuration);
   let cmd = buildStarterCommand(configuration.tmpNewStarter, configuration.tmpNewArangod, 'singleServer', 'single', configuration.tmpNewJS, true);
   execShellCommand('testSingleServer', cmd);
   return;
