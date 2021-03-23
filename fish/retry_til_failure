@@ -1,0 +1,15 @@
+function duration
+  command perl -MTime::Seconds -le 'print Time::Seconds->new(time - $ARGV[0])->pretty' $argv
+end
+
+function retry_til_failure
+    set i 1
+    set start (date +%s)
+    while $argv and $status -eq -0;
+      echo "=== $i successful run(s)"
+      echo " ==> "(duration $start) "since start"
+      set i (math $i + 1)
+    end
+    echo "=== $i th try failed";
+    echo " ==> took:" (duration $start)
+end
