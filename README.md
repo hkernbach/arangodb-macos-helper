@@ -1,2 +1,11 @@
 # arangodb-macos-helper
-This repository will provide a framework to start and test several ArangoDB setups
+
+Some various helpers to make life more easy.
+
+* fish/
+
+some useful fish shell methods 
+
+* js/
+
+provides a framework to start and test several ArangoDB setups
